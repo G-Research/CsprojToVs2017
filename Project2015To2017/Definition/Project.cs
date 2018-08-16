@@ -1,26 +1,96 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Xml.Linq;
+using NuGet.Configuration;
 
 namespace Project2015To2017.Definition
 {
-    internal sealed class Project
-    {
-        public List<AssemblyReference> AssemblyReferences { get; internal set; }
-        public IReadOnlyList<ProjectReference> ProjectReferences { get; internal set; }
-        public IReadOnlyList<PackageReference> PackageReferences { get; internal set; }
-        public IReadOnlyList<XElement> ItemsToInclude { get; internal set; }
-        public PackageConfiguration PackageConfiguration { get; internal set; }
-        public AssemblyAttributes AssemblyAttributes { get; internal set; }
-        public IReadOnlyList<XElement> ConditionalPropertyGroups { get; internal set; }
+	public sealed class Project
+	{
+		public static readonly XNamespace XmlLegacyNamespace = "http://schemas.microsoft.com/developer/msbuild/2003";
+		public XNamespace XmlNamespace => IsModernProject ? XNamespace.None : XmlLegacyNamespace;
+		public bool IsModernProject { get; set; }
 
-        public IReadOnlyList<string> TargetFrameworks { get; internal set; }
-        public ApplicationType Type { get; internal set; }
-        public bool Optimize { get; internal set; }
-        public bool TreatWarningsAsErrors { get; internal set; }
-        public string RootNamespace { get; internal set; }
-        public string AssemblyName { get; internal set; }
-        public bool AllowUnsafeBlocks { get; internal set; }
-        public bool SignAssembly { get; internal set; }
-        public string AssemblyOriginatorKeyFile { get; internal set; }
-    }
+		public IReadOnlyList<AssemblyReference> AssemblyReferences { get; set; }
+		public IReadOnlyList<ProjectReference> ProjectReferences { get; set; }
+		public IReadOnlyList<PackageReference> PackageReferences { get; set; }
+		public IReadOnlyList<XElement> IncludeItems { get; set; }
+		public PackageConfiguration PackageConfiguration { get; set; }
+		public AssemblyAttributes AssemblyAttributes { get; set; }
+		public IReadOnlyList<XElement> AdditionalPropertyGroups { get; set; }
+		public IReadOnlyList<XElement> Imports { get; set; }
+		public IReadOnlyList<XElement> Targets { get; set; }
+		public IReadOnlyList<XElement> BuildEvents { get; set; }
+		public IReadOnlyList<string> Configurations { get; set; }
+		public IReadOnlyList<string> Platforms { get; set; }
+		public IReadOnlyList<XElement> OtherPropertyGroups { get; set; }
+
+		public XDocument ProjectDocument { get; set; }
+
+		public IList<string> TargetFrameworks { get; } = new List<string>();
+		public bool AppendTargetFrameworkToOutputPath { get; set; } = true;
+		public ApplicationType Type { get; set; }
+		public bool Optimize { get; set; }
+		public bool TreatWarningsAsErrors { get; set; }
+		public string RootNamespace { get; set; }
+		public string AssemblyName { get; set; }
+		public bool AllowUnsafeBlocks { get; set; }
+		public bool SignAssembly { get; set; }
+		public bool? DelaySign { get; internal set; }
+		public string AssemblyOriginatorKeyFile { get; set; }
+		public FileInfo FilePath { get; set; }
+		public DirectoryInfo ProjectFolder => FilePath.Directory;
+
+		public bool HasMultipleAssemblyInfoFiles { get; set; }
+
+		/// <summary>
+		/// Files or folders that should be deleted as part of the conversion
+		/// </summary>
+		public IReadOnlyList<FileSystemInfo> Deletions { get; set; }
+
+		/// <summary>
+		/// The directory where NuGet stores its extracted packages for the project.
+		/// In general this is the 'packages' folder within the parent solution, but
+		/// it can be overridden, which is accounted for here.
+		/// </summary>
+		public DirectoryInfo NuGetPackagesPath
+		{
+			get
+			{
+				var projectFolder = this.ProjectFolder.FullName;
+
+				var nuGetSettings = Settings.LoadDefaultSettings(projectFolder);
+				var repositoryPathSetting = SettingsUtility.GetRepositoryPath(nuGetSettings);
+
+				//return the explicitly set path, or if there isn't one, then use the solution's path if one was provided.
+				//Otherwise assume a solution is one level above the project and therefore so is the 'packages' folder
+				if (repositoryPathSetting != null)
+				{
+					return new DirectoryInfo(repositoryPathSetting);
+				}
+
+				if (this.Solution != null)
+				{
+					return this.Solution.NuGetPackagesPath;
+				}
+
+				var path = Path.GetFullPath(Path.Combine(projectFolder, "..", "packages"));
+
+				return new DirectoryInfo(path);
+			}
+		}
+
+		public FileInfo PackagesConfigFile { get; set; }
+
+		/// <summary>
+		/// The solution in which this project was found, if any.
+		/// </summary>
+		public Solution Solution { get; set; }
+
+		public IReadOnlyList<XElement> AssemblyAttributeProperties { get; set; } = Array.Empty<XElement>();
+
+		public bool IsWindowsFormsProject { get; set; }
+		public bool IsWindowsPresentationFoundationProject { get; set; }
+	}
 }

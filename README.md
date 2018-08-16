@@ -1,4 +1,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/bpo5n2yehpqrxbc4?svg=true)](https://ci.appveyor.com/project/hvanbakel/csprojtovs2017)
+[![NuGet Version](https://img.shields.io/nuget/v/Project2015To2017.svg)](https://www.nuget.org/packages/Project2015To2017)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/Project2015To2017.svg)](https://www.nuget.org/packages/Project2015To2017)
+
 # Convert your old project files to the new 2017 format
 With the introduction of Visual Studio 2017, Microsoft added some optimizations to how a project file can be set up. However, no tooling was made available that performed this conversion as it was not necessary to do since Visual Studio 2017 would work with the old format too.
 
@@ -13,12 +16,33 @@ There are a number of things [that VS2017 handles differently](http://www.natemc
 5. Defining the NuGet package definition as part of the project file
 
 ## How it works
-Using the tool is simple, it is a simple command line utility that has a single argument being the project file you would like to convert.
-You can also give a directory path and the tool will discover all csproj files nested in it.
+### As a Net Core Global Tool
+Assuming you have net core 2.1 installed you can run this on the command line:
+`dotnet tool install Project2015To2017.Cli --global`
+This will install the tool for you to use it anywhere you would like. You can then call the tool as shown in the examples below.
 
-For example
-`Project2015To2017.exe "D:\Path\To\My\TestProject.csproj"`
+### As a normal file download
+Using the tool is simple, it is a simple command line utility that has a single argument being the project file, solution file or folder you would like to convert.
+When you give it a directory path, the tool will discover all csproj files nested in it.
+
+### Examples
+Below examples are for the global tool, for the normal file just replace `csproj-to-2017` with your executable.
+
+`csproj-to-2017 "D:\Path\To\My\TestProject.csproj"`
+
 Or
-`Project2015To2017.exe "D:\Path\To\My\Directory"`
 
-After confirming this is an old style project file, it will start performing the conversion. When it has gathered all the data it needs it first creates a backup of the old project file (suffixed with .old) and then generates a new project file in the new format. 
+`csproj-to-2017 "D:\Path\To\My\TestProject.sln"`
+
+Or
+
+`csproj-to-2017 "D:\Path\To\My\Directory"`
+
+After confirming this is an old style project file, it will start performing the conversion. When it has gathered all the data it needs it first creates a backup of the old files and puts them into a backup folder and then generates a new project file in the new format.
+
+## Flags
+* `--dry-run` will not update any files, just outputs all the messages
+* `--no-backup` will not create a backup folder
+* `--assembly-info` keep Assembly Info in a file
+* `--target-frameworks` specific target frameworks
+* `--output-path` will not create a subfolder with the target framework in the output path

@@ -1,26 +1,29 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Project2015To2017;
-using Project2015To2017.Definition;
-using System.IO;
+using System;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Linq;
-using System.Threading.Tasks;
-using System.Xml.Linq;
+using System.IO;
+using Project2015To2017.Definition;
+using Project2015To2017.Reading;
+using Project2015To2017.Transforms;
 
 namespace Project2015To2017Tests
 {
-    [TestClass]
+	[TestClass]
     public class PackageReferenceTransformationTest
     {
         [TestMethod]
-        public async Task AddsTestPackagesAsync()
+        public void AddsTestPackages()
         {
-            var project = new Project { Type = ApplicationType.TestProject, TargetFrameworks = new[] { "net45" } };
+	        var project = new ProjectReader(Path.Combine("TestFiles", "OtherTestProjects", "net46console.testcsproj")).Read();
+
+	        project.Type = ApplicationType.TestProject;
+	        project.TargetFrameworks.Add("net45");
+
             var transformation = new PackageReferenceTransformation();
 
-            var directoryInfo = new DirectoryInfo(".\\TestFiles");
-            var doc = XDocument.Load("TestFiles\\net46console.testcsproj");
+	        var progress = new Progress<string>(x => { });
 
-            await transformation.TransformAsync(doc, directoryInfo, project).ConfigureAwait(false);
+            transformation.Transform(project, progress);
 
             Assert.AreEqual(10, project.PackageReferences.Count);
             Assert.AreEqual(1, project.PackageReferences.Count(x => x.Id == "Microsoft.Owin.Host.HttpListener" && x.Version == "3.1.0"));
@@ -29,15 +32,18 @@ namespace Project2015To2017Tests
         }
 
         [TestMethod]
-        public async Task AcceptsNetStandardFrameworkAsync()
+        public void AcceptsNetStandardFramework()
         {
-            var project = new Project { Type = ApplicationType.TestProject, TargetFrameworks = new[] { "netstandard2.0" } };
-            var transformation = new PackageReferenceTransformation();
+	        var project = new ProjectReader(Path.Combine("TestFiles", "OtherTestProjects", "net46console.testcsproj")).Read();
 
-            var directoryInfo = new DirectoryInfo(".\\TestFiles");
-            var doc = XDocument.Load("TestFiles\\net46console.testcsproj");
+	        project.Type = ApplicationType.TestProject;
+	        project.TargetFrameworks.Add("netstandard2.0");
 
-            await transformation.TransformAsync(doc, directoryInfo, project).ConfigureAwait(false);
+			var transformation = new PackageReferenceTransformation();
+
+	        var progress = new Progress<string>(x => { });
+
+            transformation.Transform(project, progress);
 
             Assert.AreEqual(10, project.PackageReferences.Count);
             Assert.AreEqual(1, project.PackageReferences.Count(x => x.Id == "Microsoft.Owin.Host.HttpListener" && x.Version == "3.1.0"));
@@ -46,38 +52,32 @@ namespace Project2015To2017Tests
         }
 
         [TestMethod]
-        public async Task DoesNotAddTestPackagesIfExistsAsync()
+        public void DoesNotAddTestPackagesIfExists()
         {
-            var project = new Project { Type = ApplicationType.TestProject, TargetFrameworks = new[] { "net45" } };
             var transformation = new PackageReferenceTransformation();
 
-            var directoryInfo = new DirectoryInfo(".\\TestFiles");
-            var doc = XDocument.Parse(@"<?xml version=""1.0"" encoding=""utf-8""?>
-<Project ToolsVersion=""14.0"" DefaultTargets=""Build"" xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"">
-  <Import Project=""$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"" Condition=""Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')"" />
+			var project = new ProjectReader(Path.Combine("TestFiles", "OtherTestProjects", "containsTestSDK.testcsproj")).Read();
 
-  <ItemGroup>
-    <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""15.0.0"" />
-  </ItemGroup>
-</Project>
-");
+	        project.TargetFrameworks.Add("net45");
 
-            await transformation.TransformAsync(doc, directoryInfo, project).ConfigureAwait(false);
+	        var progress = new Progress<string>(x => { });
+
+            transformation.Transform(project, progress);
 
             Assert.AreEqual(6, project.PackageReferences.Count);
             Assert.AreEqual(0, project.PackageReferences.Count(x => x.Id == "MSTest.TestAdapter"));
         }
 
         [TestMethod]
-        public async Task TransformsPackagesAsync()
+        public void TransformsPackages()
         {
-            var project = new Project();
+	        var project = new ProjectReader(Path.Combine("TestFiles", "OtherTestProjects", "net46console.testcsproj")).Read();
+
             var transformation = new PackageReferenceTransformation();
 
-            var directoryInfo = new DirectoryInfo(".\\TestFiles");
-            var doc = XDocument.Load("TestFiles\\net46console.testcsproj");
+	        var progress = new Progress<string>(x => { });
 
-            await transformation.TransformAsync(doc, directoryInfo, project).ConfigureAwait(false);
+            transformation.Transform(project, progress);
 
             Assert.AreEqual(7, project.PackageReferences.Count);
             Assert.AreEqual(2, project.PackageReferences.Count(x => x.IsDevelopmentDependency));
@@ -85,15 +85,14 @@ namespace Project2015To2017Tests
         }
 
         [TestMethod]
-        public async Task HandlesNonXmlAsync()
+        public void HandlesNonXml()
         {
-            var project = new Project();
+            var project = new ProjectReader(Path.Combine("TestFiles", "OtherTestProjects", "net46console.testcsproj")).Read();
             var transformation = new PackageReferenceTransformation();
 
-            var directoryInfo = new DirectoryInfo(".\\OtherPackagesConfig");
-            var doc = XDocument.Load("OtherPackagesConfig\\net46console.testcsproj");
+	        var progress = new Progress<string>(x => { });
 
-            await transformation.TransformAsync(doc, directoryInfo, project).ConfigureAwait(false);
+            transformation.Transform(project, progress);
         }
     }
 }

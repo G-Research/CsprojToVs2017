@@ -1,36 +1,102 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Project2015To2017;
-using Project2015To2017.Definition;
-using System.Linq;
+using System;
+using System.Collections.Generic;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.IO;
-using System.Threading.Tasks;
-using System.Xml.Linq;
+using System.Linq;
+using Project2015To2017.Reading;
+using Project2015To2017.Transforms;
 
 namespace Project2015To2017Tests
 {
-    [TestClass]
+	[TestClass]
     public class FileTransformationTest
     {
         [TestMethod]
-        public async Task TransformsFiles()
+        public void TransformsFiles()
         {
-            var project = new Project();
+            var project = new ProjectReader(Path.Combine("TestFiles", "FileInclusion", "fileinclusion.testcsproj")).Read();
             var transformation = new FileTransformation();
 
-            var directoryInfo = new DirectoryInfo(".\\TestFiles");
-            var doc = XDocument.Load("TestFiles\\fileinclusion.testcsproj");
+	        var logEntries = new List<string>();
 
-            await transformation.TransformAsync(doc, directoryInfo, project).ConfigureAwait(false);
+	        var progress = new Progress<string>(x => { logEntries.Add(x); });
 
-            Assert.AreEqual(5, project.ItemsToInclude.Count);
+            transformation.Transform(project, progress);
 
-            XNamespace nsSys = "http://schemas.microsoft.com/developer/msbuild/2003";
-            Assert.AreEqual(1, project.ItemsToInclude.Count(x => x.Name == nsSys + "Compile"));
-            Assert.AreEqual(2, project.ItemsToInclude.Count(x => x.Name == "Compile"));
-            Assert.AreEqual(2, project.ItemsToInclude.Count(x => x.Name == "Compile" && x.Attribute("Update") != null));
-            Assert.AreEqual(0, project.ItemsToInclude.Count(x => x.Name == nsSys + "EmbeddedResource"));
-            Assert.AreEqual(0, project.ItemsToInclude.Count(x => x.Name == nsSys + "Content"));
-            Assert.AreEqual(2, project.ItemsToInclude.Count(x => x.Name == nsSys + "None"));
+	        var includeItems = project.IncludeItems;
+
+	        Assert.AreEqual(13, includeItems.Count);
+
+            Assert.AreEqual(9, includeItems.Count(x => x.Name == project.XmlNamespace + "Compile"));
+			Assert.AreEqual(6, includeItems.Count(x => x.Name == project.XmlNamespace + "Compile" && x.Attribute("Update") != null));
+			Assert.AreEqual(1, includeItems.Count(x => x.Name == project.XmlNamespace + "Compile" && x.Attribute("Include") != null));
+			Assert.AreEqual(2, includeItems.Count(x => x.Name == project.XmlNamespace + "Compile" && x.Attribute("Remove") != null));
+			Assert.AreEqual(2, includeItems.Count(x => x.Name == project.XmlNamespace + "EmbeddedResource")); // #73 inlcude things that are not ending in .resx
+            Assert.AreEqual(0, includeItems.Count(x => x.Name == project.XmlNamespace + "Content"));
+            Assert.AreEqual(2, includeItems.Count(x => x.Name == project.XmlNamespace + "None"));
+
+	        var resourceDesigner = includeItems.Single(
+								        x => x.Name == project.XmlNamespace + "Compile"
+								             && x.Attribute("Update")?.Value == @"Properties\Resources.Designer.cs"
+							        );
+
+			Assert.AreEqual(3, resourceDesigner.Elements().Count());
+	        var dependentUponElement = resourceDesigner.Elements().Single(x=> x.Name == project.XmlNamespace + "DependentUpon");
+			
+			Assert.AreEqual("Resources.resx", dependentUponElement.Value);
+
+			var linkedFile = includeItems.Single(
+										x => x.Name == project.XmlNamespace + "Compile"
+											 && x.Attribute("Include")?.Value == @"..\OtherTestProjects\OtherTestClass.cs"
+									);
+			var linkAttribute = linkedFile.Attributes().FirstOrDefault(a => a.Name == "Link");
+			Assert.IsNotNull(linkAttribute);
+			Assert.AreEqual("OtherTestClass.cs", linkAttribute.Value);
+
+			var sourceWithDesigner = includeItems.Single(
+								        x => x.Name == project.XmlNamespace + "Compile"
+								             && x.Attribute("Update")?.Value == @"SourceFileWithDesigner.cs"
+							        );
+
+			var subTypeElement = sourceWithDesigner.Elements().Single();
+	        Assert.AreEqual(project.XmlNamespace + "SubType", subTypeElement.Name);
+	        Assert.AreEqual("Component", subTypeElement.Value);
+
+	        var designerForSource = includeItems.Single(
+								        x => x.Name == project.XmlNamespace + "Compile"
+								             && x.Attribute("Update")?.Value == @"SourceFileWithDesigner.Designer.cs"
+							        );
+
+	        var dependentUponElement2 = designerForSource.Elements().Single();
+
+	        Assert.AreEqual(project.XmlNamespace + "DependentUpon", dependentUponElement2.Name);
+	        Assert.AreEqual("SourceFileWithDesigner.cs", dependentUponElement2.Value);
+
+	        var fileWithAnotherAttribute = includeItems.Single(
+												x => x.Name == project.XmlNamespace + "Compile"
+													&& x.Attribute("Update")?.Value == @"AnotherFile.cs"
+									        );
+
+			Assert.AreEqual(2, fileWithAnotherAttribute.Attributes().Count());
+			Assert.AreEqual("AttrValue", fileWithAnotherAttribute.Attribute("AnotherAttribute")?.Value);
+
+			var removeMatchingWildcard = includeItems.Where(
+											x => x.Name == project.XmlNamespace + "Compile"
+												&& x.Attribute("Remove")?.Value != null
+										);
+			Assert.IsNotNull(removeMatchingWildcard);
+			Assert.AreEqual(2, removeMatchingWildcard.Count());
+			Assert.IsTrue(removeMatchingWildcard.Any(x => x.Attribute("Remove")?.Value == "SourceFileAsResource.cs"));
+			Assert.IsTrue(removeMatchingWildcard.Any(x => x.Attribute("Remove")?.Value == "Class1.cs"));
+
+			//<Compile Include="AnotherFile.cs" AnotherAttribute="AttrValue" />
+			var warningLogEntries = logEntries
+								        .Where(x => x.StartsWith("File found") || x.StartsWith("File was included"))
+								        //todo: would be good to be able to remove this condition and not warn on wildcard inclusions
+										//that are covered by main wildcard
+								        .Where(x => !x.ToUpper().Contains("WILDCARD"));
+
+			Assert.IsFalse(warningLogEntries.Any());
         }
     }
 }
